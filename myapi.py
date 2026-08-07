@@ -75,7 +75,7 @@ def create_user(user:UserCreate, db:Session = Depends(get_db)):
 
 @app.put("/user/{user_id}", response_model=UserResponse)
 def update_user(user_id: int, user:UserCreate, db:Session = Depends(get_db)):
-    db_user = db.query(Usesr).filter(User.id == user_id).first()
+    db_user = db.query(User).filter(User.id == user_id).first()
     if not db_user:
         raise HTTPException(status_code=404, detail="User does not exist")
 
@@ -84,10 +84,21 @@ def update_user(user_id: int, user:UserCreate, db:Session = Depends(get_db)):
 
     db.commit()
     db.refresh()
-
+    return db_user
 
 
 #Delete User
+@app.delete("/user/{user_id}")
+def delete_user(user_id:int, db:Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User doesn't exist")
 
+    db.delete(db_user)
+    db.commit()
+    return{"message":"User has been deleted"}
 
 #Get all users
+@app.get("/users/", response_model=List[UserResponse])
+def get_all_users(db:Session = Depends(get_db)):
+    return db.query(User).all()

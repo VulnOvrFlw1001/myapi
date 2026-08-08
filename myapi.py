@@ -1,6 +1,6 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy import create_engine, Column, Integer, String, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from pydantic import BaseModel
@@ -16,6 +16,9 @@ SECRET_KEY = "coder"
 ALGORITHM = "HS236"
 TOKEN_EXPIRES = 30
 
+pwd_context = CryptContext(schemes=['bcrypt'], deprecated="auto") #Password hasher
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token") #Token generator
+
 
 #Database setup
 engine = create_engine("sqlite:///users.db", connect_args={"check_same_thread":False})
@@ -30,6 +33,8 @@ class User(Base):
     name = Column(String, nullable=False)
     email = Column(String, nullable=False, unique=True)
     role = Column(String, nullable=False)
+    hashed_pwd = Column(String, nullable=False)
+    is_active = Column(Boolean, default=True)
 
 Base.metadata.create_all(engine)
 
@@ -38,14 +43,70 @@ class UserCreate(BaseModel):
     name:str
     email:str
     role:str
+    password:str
 
 class UserResponse(BaseModel):
     name:str
     email:str
     role:str
+    is_active:bool
 
     class Copnfig: 
         from_attributes = True
+
+# New Pydantic Models
+class UserLogin(BaseModel):
+    email:str
+    password:str
+
+class Token(BaseModel):
+    access_token:str
+    token_type:str
+
+class TokenData(BaseModel):
+    email: Optional[str] = None
+
+
+# Security Functions
+def verify_pwd(plain_pwd: str, hashed_pwd: str) -> bool:
+    return pwd_context.verify(plain_pwd, hashed_pwd)
+
+def get_pwd_hash(password:str)-> str:
+    return pwd_context.hash(password)
+
+def create_access_token(data:dict, expires_delta: Optional[timedelta]=None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+
+    to_encode.update({"exp":expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
+
+def verify_token(token:str) -> TokenData:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unable to verify credentials",
+                headers={"WWW-Authenticate":"Bearer"}
+            )
+        return TokenData(email=email)
+    except jwt.PyJWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unable to verify credentials",
+                headers={"WWW-Authenticate":"Bearer"}
+        )
+
+
+
 
 def get_db():
     db = SessionLocal()

@@ -1,12 +1,21 @@
 from fastapi import FastAPI, HTTPException, Depends
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
-
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import List, Optional
+from passlib.context import CryptContext
+import jwt
+from datetime import datetime, timedelta
 
 app = FastAPI(title="Integration with SQL")
+
+#Security Configurations
+SECRET_KEY = "coder"
+ALGORITHM = "HS236"
+TOKEN_EXPIRES = 30
+
 
 #Database setup
 engine = create_engine("sqlite:///users.db", connect_args={"check_same_thread":False})

@@ -137,7 +137,7 @@ def get_current_active_user(current_user: User = Depends(get_current_user)):
 app = FastAPI(title="Code with Josh")
 
 #Auth Endpoints
-@app.post("/register", response_model=UserResponse):
+@app.post("/register", response_model=UserResponse)
 def register_user(user: UserCreate, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == user.email).first():
         raise HTTPException(
@@ -201,33 +201,41 @@ def verify_token_endpoint(current_user:User=Depends(get_current_active_user)):
     }
 
 @app.get("/users/{user_id}", response_model=UserResponse)
-def get_user(user_id:int, db:Session = Depends(get_db)):
+def get_user(user_id:int, int,current_user:User = Depends(get_current_active_user), db:Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found!")
     return user
 
 @app.post("/users/", response_model=UserResponse)
-def create_user(user:UserCreate, db:Session = Depends(get_db)):
+def create_user(user:UserCreate, current_user:User = Depends(get_current_active_user), db:Session = Depends(get_db)):
     if db.query(User).filter(User.email == user.email).first():
-        raise HTTPException(status_code=404, detail="User exists already")
+        raise HTTPException(status_code=404, detail="Email exists already")
 
-    new_user = User(**user.dict())
-    db.add(new_user)
+    hashed_password = get_pwd_hash(user.password)
+    db_user = User(
+        name=user.name,
+        email=user.email,
+        role=user.role,
+        hashed_password=hashed_password
+    )
+
+    db.add(db_user)
     db.commit()
-    db.refresh(new_user)
-    return new_user
+    db.refresh(db_user)
+    return db_user
 
 #Update User
 
 @app.put("/user/{user_id}", response_model=UserResponse)
-def update_user(user_id: int, user:UserCreate, db:Session = Depends(get_db)):
+def update_user(user_id: int, user:UserCreate, current_user:User = Depends(get_current_active_user), db:Session = Depends(get_db)):
     db_user = db.query(User).filter(User.id == user_id).first()
     if not db_user:
         raise HTTPException(status_code=404, detail="User does not exist")
 
-    for field, value in user.dict().items():
-        setattr(db_user, field, value)
+    db_user.name = update_user.name
+    db_user.email = update_user.email
+    db_user.role = update_user.role
 
     db.commit()
     db.refresh()
@@ -236,11 +244,14 @@ def update_user(user_id: int, user:UserCreate, db:Session = Depends(get_db)):
 
 #Delete User
 @app.delete("/user/{user_id}")
-def delete_user(user_id:int, db:Session = Depends(get_db)):
+def delete_user(user_id:int, user:UserCreate, current_user:User = Depends(get_current_active_user), db:Session = Depends(get_db)):
     db_user = db.query(User).filter(User.id == user_id).first()
     if not db_user:
         raise HTTPException(status_code=404, detail="User doesn't exist")
 
+    if user_id == current_user.id:
+        raise HTTPException(status_code=404, detail="You cannot delete yourself")
+    
     db.delete(db_user)
     db.commit()
     return{"message":"User has been deleted"}

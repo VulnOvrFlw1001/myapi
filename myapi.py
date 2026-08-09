@@ -115,8 +115,26 @@ def get_db():
     finally:
         db.close()
 
-get_db()
+def get_current_user(token:str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    token_data = verify_token(token)
+    user = db.query(User).filter(User.email == token_data.email).first()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+                detail = "Couldn't verify credentails",
+                headers={"WWW-Authenticate":"Bearer"}
+        )
+    
 
+def get_current_active_user(current_user: User = Depends(get_current_user)):
+    if not current_user.is_active:
+        raise HTTPexception(
+            status_code=404,
+            detail="Inactive User"
+        )
+    return current_user
+
+app = FastAPI(title="Code with Josh")
 
 #Endpoints
 @app.get("/")
